@@ -1,0 +1,12 @@
+# SITE_ADDRESS=":80"  -> site em http, sem domínio (padrão)
+# SITE_ADDRESS="meusite.com.br, www.meusite.com.br" -> HTTPS automático (Let's Encrypt)
+{$SITE_ADDRESS::80} {
+	root * /srv
+	file_server
+	encode gzip
+	header {
+		Cache-Control "public, max-age=120"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}

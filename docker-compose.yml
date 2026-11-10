@@ -1,0 +1,85 @@
+# Radar de Ofertas — sobe tudo com:  docker compose up -d
+# Configure pelas variáveis de ambiente (arquivo .env ou painel da sua hospedagem).
+
+x-app: &app
+  build: .
+  image: radar-ofertas:local
+  restart: unless-stopped
+  environment: &env
+    DATABASE_URL: postgresql://radar:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}@db:5432/radar
+    TZ: America/Sao_Paulo
+    DRY_RUN: ${DRY_RUN:-1}
+    TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    CHANNEL_USERNAME: ${CHANNEL_USERNAME:-}
+    SHOPEE_APP_ID: ${SHOPEE_APP_ID:-}
+    SHOPEE_SECRET: ${SHOPEE_SECRET:-}
+    SHOPEE_ENDPOINT: ${SHOPEE_ENDPOINT:-https://open-api.affiliate.shopee.com.br/graphql}
+    ML_CLIENT_ID: ${ML_CLIENT_ID:-}
+    ML_CLIENT_SECRET: ${ML_CLIENT_SECRET:-}
+    ML_MATT_WORD: ${ML_MATT_WORD:-}
+    ML_MATT_TOOL: ${ML_MATT_TOOL:-}
+    SEARCHES: ${SEARCHES:-}
+    CYCLE_MINUTES: ${CYCLE_MINUTES:-10}
+    MAX_POSTS_PER_HOUR: ${MAX_POSTS_PER_HOUR:-6}
+    QUIET_HOURS: ${QUIET_HOURS:-0-7}
+    DROP_PCT: ${DROP_PCT:-20}
+    MIN_HISTORY_DAYS: ${MIN_HISTORY_DAYS:-2}
+    SITE_NAME: ${SITE_NAME:-Radar de Ofertas}
+    SITE_URL: ${SITE_URL:-}
+    SITE_META: ${SITE_META:-}
+  depends_on:
+    db:
+      condition: service_healthy
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: radar
+      POSTGRES_DB: radar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+      TZ: America/Sao_Paulo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar"]
+      interval: 10s
+      retries: 5
+    # sem "ports": o banco só é acessível pela rede interna do Docker
+
+  bot:
+    <<: *app
+
+  site:
+    <<: *app
+    command: ["python", "-m", "radar.site"]
+    volumes:
+      - sitedata:/site
+
+  web:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - sitedata:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - site        # o site cria o volume primeiro (com a permissão certa)
+
+volumes:
+  pgdata:
+  sitedata:
+  caddy_data:
+  caddy_config:
